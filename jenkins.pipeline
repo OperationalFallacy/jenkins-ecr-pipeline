@@ -1,0 +1,49 @@
+pipeline {
+    
+    agent any
+
+    environment {
+        AWS_REGION="us-east-1"
+        AWS_ACCOUNT = "${sh(script:'aws sts get-caller-identity --region us-east-1 | jq -r .Account', returnStdout: true).trim()}"
+    }
+
+    stages {
+        stage('Set AWS profile') {
+            steps {
+                script {
+                    sh 'aws configure list'
+                    sh 'env'
+                }
+            }
+        }
+
+        stage('Clone repository') {
+            steps {
+                script {
+                    git branch: "master", url: "git@github.com:OperationalFallacy/jenkins-ecr-pipeline.git"
+                }
+            }
+        }
+        
+        stage('Build image') {
+            steps {
+                script {
+                    sh 'docker ps'
+                    sh 'env'
+                    sh 'docker build --build-arg APP_NAME=test -t $AWS_ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/$AWS_ACCOUNT-app-dev1:latest -f docker/Dockerfile .'
+                }
+            }
+        }
+
+        stage('Push image') {
+            steps {
+                script {
+                    withAWS(profile:'default') {
+                        sh 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $AWS_ACCOUNT.dkr.ecr.us-east-1.amazonaws.com'
+                        sh 'docker push $AWS_ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/$AWS_ACCOUNT-app-dev1:latest'
+                    }
+                }
+            }
+        }
+    }
+}
